@@ -1,0 +1,168 @@
+@{layout('')}
+@{title(config.name)}
+
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=10" />
+	<meta name="format-detection" content="telephone=no" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+	<meta name="robots" content="all,follow" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content="@{'%name'}" />
+	<link rel="stylesheet" href="//cdn.componentator.com/spa.min@14.css" />
+	<script src="//cdn.componentator.com/spa.min@14.js"></script>
+	@{import('meta', 'head', 'default.css', 'default.js', 'favicon.ico')}
+	<script>var user = EMPTYOBJECT</script>
+</head>
+<body data-jc="exec,binder,modificator">
+
+	<div data-jc="loading" class="ui-loading"></div>
+	<div data-jc="contextmenu"></div>
+	<div data-jc="confirm"></div>
+	<div data-jc="snackbar"></div>
+	<div data-jc="contextmenu"></div>
+	<div data-jc="websocket" data-jc-config="url:/"></div>
+	<div data-jc="calendar"></div>
+	<div data-jc="audio" data-jc-path="user.volume"></div>
+
+	<header>
+
+		<nav>
+			<button class="exec" data-exec="home"><i class="fa fa-dashboard"></i></button>
+		</nav>
+		<nav data-jc="repeater" data-jc-path="dashboard.apps">
+			<script type="text/html">
+				<i class="fa fa-times exec" data-exec="Dashboard/close" data-id="{{ id }}"></i>
+				<button title="{{ internal.title }}" class="exec appprocess" data-exec="Dashboard/open" data-id="{{ id }}"><img src="{{ internal.icon }}" onerror="onImageError(this)" alt="{{ internal.title }}" /></button>
+			</script>
+		</nav>
+
+		<div class="user exec" data-exec="mainmenu">
+			<div class="hidden-xs">
+				<b class="singleline" data-b="user.name" data-b-html="value"></b>
+				<div class="singleline" data-b="user.position" data-b-html="value"></div>
+			</div>
+			<img src="/img/face.jpg" data-b="user.photo" data-b-src="Tangular.helpers.photo(value)" onerror="onImageError(this)" />
+		</div>
+		<div class="user-notifications exec" data-path="common.notifications" data-value="!common.notifications">
+			<span data-b="user.countnotifications" data-b-visible="value > 0" data-b-html="value > 99 ? 99 : value" class="hidden">0</span>
+			<i class="fa fa-bell-o" data-b="common.notifications" data-b-class="value ? '+fa-bell -fa-bell-o' : '+fa-bell-o -fa-bell'"></i>
+		</div>
+	</header>
+
+	<div data-jc="notificationspanel" data-jc-path="common.notifications" class="hidden" data-b="common.notifications" data-b-visible="value === true">
+		<div class="ui-npanel-clear hidden"><i class="fa fa-trash"></i>@(Remove all notifications)</div>
+		<script type="text/html">
+			<div class="ui-npanel-message{{ if type === 1 }} ui-npanel-success{{ else if type === 2 }} ui-npanel-error{{ fi }}">
+				<div class="ui-npanel-date"><i class="fa fa-clock-o"></i>{{ datecreated | format('yyyy-MM-dd HH:mm') }}</div>
+				<div class="ui-npanel-title">{{ if icon }}<img src="{{ icon }}" width="16" onerror="onImageError(this)" /><b>{{ fi }}{{ title }}</b></div>
+				<div class="ui-npanel-padding">
+					<div class="ui-npanel-body">{{ body }}</div>
+					{{ if url }}
+					<button data-url="{{ url }}" data-id="{{ idapp }}" class="exec" data-exec="Dashboard/navigate">@(Show)</button>
+					{{ fi }}
+				</div>
+			</div>
+		</script>
+	</div>
+
+	<div class="scrollable">
+		<div data-jc="page" data-jc-path="common.page" data-jc-config="if:dashboard;template:/pages/dashboard.html"></div>
+		@{if user.sa}
+		<div data-jc="page" data-jc-path="common.page" data-jc-config="if:users;template:/pages/users.html"></div>
+		<div data-jc="page" data-jc-path="common.page" data-jc-config="if:apps;template:/pages/apps.html"></div>
+		<div data-jc="page" data-jc-path="common.page" data-jc-config="if:settings;template:/pages/settings.html"></div>
+		@{fi}
+		<div data-jc="page" data-jc-path="common.page" data-jc-config="if:account;template:/pages/account.html;reload:Account/reload"></div>
+	</div>
+
+	@{import('routes.js')}
+
+	<script>
+		function mainmenu(el) {
+			var items = [];
+
+			items.push({ name: '<b>@(Dashboard)</b>', icon: 'dashboard', value: '/' });
+
+			if (user.sa) {
+ 				items.push({ name: '@(Users)', icon: 'users', value: '/users/' });
+				items.push({ name: '@(Applications)', icon: 'th', value: '/apps/' });
+				items.push({ name: '@(Settings)', icon: 'cog', value: '/settings/' });
+			}
+
+			items.push({ name: '@(My account)', icon: 'user', value: '/account/' });
+			items.push({ name: '<b>@(Sign out)</b>', icon: 'power-off', value: '/logoff/' });
+
+			FIND('contextmenu').show('right', el, items, function(item) {
+				switch (item.value) {
+					case '/logoff/':
+						COOKIES.set('@{'%cookie'}', '', '-1 day');
+						location.href = item.value;
+						break;
+					default:
+						REDIRECT(item.value);
+						break;
+				}
+			}, -20, 10);
+		}
+
+		WATCH('common.notifications', function(path, value) {
+			value && refresh_notifications();
+		});
+
+		function refresh_notifications() {
+			user.countnotifications && SETTER('websocket', 'send', { TYPE: 'notifications' });
+			user.countnotifications = 0;
+		}
+
+		ON('message', function(message) {
+			switch (message.TYPE) {
+				case 'open':
+					message.body.internal = user.apps.findItem('id', message.body.id);
+					dashboard.apps.push(message.body);
+					SET('dashboard.current', message.body);
+					$('.appunread[data-id="{0}"]'.format(message.body.id)).aclass('hidden');
+					break;
+				case 'logoff':
+					COOKIES.set('@{'%cookie'}', '', '-1 day');
+					location.href = '/';
+					break;
+				case 'profile':
+					message.body.apps.quicksort('title');
+					SET('user', message.body);
+					EXEC('Dashboard/sync');
+					break;
+				case 'notifications':
+					// take max. 50
+					var arr = PARSE(message.body);
+					arr && arr.length && SETTER('notificationspanel', 'append', arr.take(50));
+					break;
+				case 'notify':
+					var tmp = message.body;
+					SET('user.countnotifications', tmp.count);
+					tmp.app.id && $('.appunread[data-id="{0}"]'.format(tmp.app.id)).html(tmp.app.count).tclass('hidden', !tmp.app.count);
+					user.countnotifications && user.sounds && SETTER('audio', 'play', '/sounds/beep.mp3');
+					common.notifications && refresh_notifications();
+					break;
+			}
+		});
+
+		ON('online', function(is) {
+			SETTER('loading', is ? 'hide' : 'show');
+		});
+
+		$(document).on('dblclick', '.appprocess', function() {
+			if (user.sa) {
+				var id = $(this).attrd('id');
+				setTimeout(function() {
+					SETTER('processes', 'reload', id);
+				}, 500);
+			}
+		});
+
+	</script>
+
+</body>
+</html>
